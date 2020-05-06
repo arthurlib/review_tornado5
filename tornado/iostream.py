@@ -118,33 +118,40 @@ class StreamBufferFullError(Exception):
     """
 
 
+# 提供缓冲区类
 class _StreamBuffer(object):
     """
     A specialized buffer that tries to avoid copies when large pieces
     of data are encountered.
+    一个专门的缓冲区，当遇到大量数据时，它尝试避免复制。
     """
 
     def __init__(self):
         # A sequence of (False, bytearray) and (True, memoryview) objects
         self._buffers = collections.deque()
         # Position in the first buffer
+        # 在第一个缓冲区中的位置
         self._first_pos = 0
-        self._size = 0
+        self._size = 0  # 缓冲长度
 
     def __len__(self):
         return self._size
 
     # Data above this size will be appended separately instead
     # of extending an existing bytearray
+    # 超过此大小的数据将被单独添加，而不是扩展现有的字节数组
     _large_buf_threshold = 2048
 
     def append(self, data):
         """
         Append the given piece of data (should be a buffer-compatible object).
+        附加给定的数据（应该是与缓冲区兼容的对象）
         """
         size = len(data)
         if size > self._large_buf_threshold:
             if not isinstance(data, memoryview):
+                # memoryview() 函数返回给定参数的内存查看对象
+                # 所谓内存查看对象，是指对支持缓冲区协议的数据进行包装，在不需要复制对象基础上允许Python代码访问
                 data = memoryview(data)
             self._buffers.append((True, data))
         elif size > 0:
@@ -164,6 +171,7 @@ class _StreamBuffer(object):
         """
         Get a view over at most ``size`` bytes (possibly fewer) at the
         current buffer position.
+        在当前缓冲区位置获取最多“大小”字节（可能更少）的视图。
         """
         assert size > 0
         try:
@@ -180,6 +188,7 @@ class _StreamBuffer(object):
     def advance(self, size):
         """
         Advance the current buffer position by ``size`` bytes.
+        将当前缓冲区的位置提前``size''个字节。
         """
         assert 0 < size <= self._size
         self._size -= size
@@ -232,10 +241,13 @@ class BaseIOStream(object):
 
         :arg max_buffer_size: Maximum amount of incoming data to buffer;
             defaults to 100MB.
+            要缓冲的最大传入数据量； 默认为100MB。
         :arg read_chunk_size: Amount of data to read at one time from the
             underlying transport; defaults to 64KB.
+            一次从底层传输读取的数据量； 默认为64KB。
         :arg max_write_buffer_size: Amount of outgoing data to buffer;
             defaults to unlimited.
+            要缓冲的传出数据量； 默认为无限制。
 
         .. versionchanged:: 4.0
            Add the ``max_write_buffer_size`` parameter.  Changed default
@@ -284,10 +296,12 @@ class BaseIOStream(object):
         self._pending_callbacks = 0
         self._closed = False
 
+    # 子类继承
     def fileno(self):
         """Returns the file descriptor for this stream."""
         raise NotImplementedError()
 
+    # 子类继承
     def close_fd(self):
         """Closes the file underlying this stream.
 
@@ -296,6 +310,7 @@ class BaseIOStream(object):
         """
         raise NotImplementedError()
 
+    # 子类继承
     def write_to_fd(self, data):
         """Attempts to write ``data`` to the underlying file.
 
@@ -303,6 +318,7 @@ class BaseIOStream(object):
         """
         raise NotImplementedError()
 
+    # 子类继承
     def read_from_fd(self, buf):
         """Attempts to read from the underlying file.
 
@@ -318,6 +334,7 @@ class BaseIOStream(object):
         """
         raise NotImplementedError()
 
+    # 子类继承
     def get_fd_error(self):
         """Returns information about any error on the underlying file.
 
@@ -330,11 +347,15 @@ class BaseIOStream(object):
 
     def read_until_regex(self, regex, callback=None, max_bytes=None):
         """Asynchronously read until we have matched the given regex.
+        异步读取，直到我们匹配了给定的正则表达式
 
         The result includes the data that matches the regex and anything
         that came before it.  If a callback is given, it will be run
         with the data as an argument; if not, this method returns a
         `.Future`.
+
+        结果包括与正则表达式匹配的数据以及任何其他内容 在那之前。 如果给出了回调，它将被运行 以数据为参数；
+        如果不是，则此方法返回一个  `.Future`
 
         If ``max_bytes`` is not None, the connection will be closed
         if more than ``max_bytes`` bytes have been read and the regex is
@@ -348,6 +369,7 @@ class BaseIOStream(object):
 
            The ``callback`` argument is deprecated and will be removed
            in Tornado 6.0. Use the returned `.Future` instead.
+           回调参数会被移除
 
         """
         future = self._set_read_callback(callback)
