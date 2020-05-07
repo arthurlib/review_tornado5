@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Bridges between the `asyncio` module and Tornado IOLoop.
 
 .. versionadded:: 3.2

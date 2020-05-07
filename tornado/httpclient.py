@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Blocking and non-blocking HTTP client interfaces.
 
 This module defines a common interface shared by two implementations,

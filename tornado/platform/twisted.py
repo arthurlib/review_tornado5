@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Author: Ovidiu Predescu
 # Date: July 2011
 #

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Copyright 2010 Facebook
 #
@@ -278,10 +279,10 @@ def _remove_deactivated(contexts):
     return (stack_contexts, head)
 
 
-def wrap(fn):
+def wrap(fn):  # todo zzy
     """Returns a callable object that will restore the current `StackContext`
     when executed.
-    返回一个可调用对象，它将恢复当前的`StackContext`，在执行时
+    返回一个可调用对象，它将在执行时恢复当前的`StackContext`
 
     Use this whenever saving a callback to be executed later in a
     different execution context (either in a different thread or
@@ -308,7 +309,7 @@ def wrap(fn):
         null_wrapper._wrapped = True
         return null_wrapper
 
-    def wrapped(*args, **kwargs):
+    def wrapped(*args, **kwargs):  # todo zzy
         ret = None
         try:
             # Capture old state

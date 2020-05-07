@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''win32支持，还不好用'''
 # NOTE: win32 support is currently experimental, and not recommended
 # for production use.

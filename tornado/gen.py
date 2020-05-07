@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """``tornado.gen`` implements generator-based coroutines.
 
 .. note::
@@ -168,6 +169,7 @@ class ReturnValueIgnoredError(Exception):
     pass
 
 
+# 获取生成器结束之后的值
 def _value_from_stopiteration(e):
     try:
         # StopIteration has a value attribute beginning in py33.
@@ -244,6 +246,7 @@ def engine(func):
 # 装饰器
 def coroutine(func):
     """Decorator for asynchronous generators.
+    异步生成器的装饰器。
 
     Any generator that yields objects from this module must be wrapped
     in either this decorator or `engine`.
@@ -254,6 +257,9 @@ def coroutine(func):
     Python 3.3 generators were not allowed to also return values).
     In all versions of Python a coroutine that simply wishes to exit
     early may use the ``return`` statement without a value.
+    协程可以通过引发特殊异常`Return（value）<Return>`来“返回”。
+    在Python 3.3+中，该函数也可以简单地使用“返回值”语句（在Python 3.3之前，不允许生成器也返回值）。
+    在所有版本的Python中，仅希望提前退出的协程可以使用没有值的``return''语句。
 
     Functions with this decorator return a `.Future`.  Additionally,
     they may be called with a ``callback`` keyword argument, which
@@ -262,6 +268,9 @@ def coroutine(func):
     will be raised into the surrounding `.StackContext`.  The
     ``callback`` argument is not visible inside the decorated
     function; it is handled by the decorator itself.
+    具有此装饰器的函数将返回`.Future`。 此外，可以使用关键字参数callback来调用它们，解析时将使用将来的结果来调用它们。
+    如果协程失败，则回调将不会运行，并且周围的.StackContext将引发异常。
+    ``callback``参数在装饰的函数内部不可见； 它由装饰器本身处理。
 
     .. warning::
 
@@ -272,11 +281,15 @@ def coroutine(func):
        if called from another coroutine, using something like
        `.IOLoop.run_sync` for top-level calls, or passing the `.Future`
        to `.IOLoop.add_future`.
+       当协程内部发生异常时，异常信息将存储在`.Future`对象中。 您必须检查.Future对象的结果，否则代码可能不会注意到该异常。
+       这意味着如果从另一个协程调用该函数，则使用`.IOLoop.run_sync`之类的顶级调用，
+       或将`.Future`传递给`.IOLoop.add_future`来产生该函数。
 
     .. deprecated:: 5.1
 
        The ``callback`` argument is deprecated and will be removed in 6.0.
        Use the returned awaitable object instead.
+       ``callback''参数已被弃用，并将在6.0中删除。 请使用返回可等待对象代替。
     """
     return _make_coroutine_wrapper(func, replace_callback=True)
 
@@ -292,11 +305,11 @@ def _make_coroutine_wrapper(func, replace_callback):
     # to be used with 'await'.
     wrapped = func
     if hasattr(types, 'coroutine'):
-        func = types.coroutine(func)
+        func = types.coroutine(func)  # >=py3.5 为生成器设置协程标识，令其拥有__await__
 
     @functools.wraps(wrapped)
     def wrapper(*args, **kwargs):
-        future = _create_future()
+        future = _create_future()  # 创建一个future
 
         if replace_callback and 'callback' in kwargs:
             warnings.warn("callback arguments are deprecated, use the returned Future instead",
@@ -306,26 +319,28 @@ def _make_coroutine_wrapper(func, replace_callback):
                 future, lambda future: callback(future.result()))
 
         try:
-            result = func(*args, **kwargs)
-        except (Return, StopIteration) as e:
-            result = _value_from_stopiteration(e)
-        except Exception:
-            future_set_exc_info(future, sys.exc_info())
+            result = func(*args, **kwargs)  # 生成生成器，或者执行正常函数
+        except (Return, StopIteration) as e:  # 结束了，或者返回了
+            result = _value_from_stopiteration(e)  # 获取返回值
+        except Exception:  # 其他异常
+            future_set_exc_info(future, sys.exc_info())  # 设置异常
             try:
-                return future
+                return future  # 返回future，带结果
             finally:
                 # Avoid circular references
                 future = None
         else:
-            if isinstance(result, GeneratorType):
+            if isinstance(result, GeneratorType):  # 如果返回了一个生成器对象
                 # Inline the first iteration of Runner.run.  This lets us
                 # avoid the cost of creating a Runner when the coroutine
                 # never actually yields, which in turn allows us to
                 # use "optional" coroutines in critical path code without
                 # performance penalty for the synchronous case.
+                # 内联Runner.run的第一次迭代。 这样就避免了在协程实际产生时创建Runner的成本，
+                # 从而又使我们可以在关键路径代码中使用“可选”协程，而不会因同步情况而降低性能。
                 try:
-                    orig_stack_contexts = stack_context._state.contexts
-                    yielded = next(result)
+                    orig_stack_contexts = stack_context._state.contexts  # todo zzy 不懂放的具体是什么，以及该单例作用
+                    yielded = next(result)  # 第一次激活生成器
                     if stack_context._state.contexts is not orig_stack_contexts:
                         yielded = _create_future()
                         yielded.set_exception(
@@ -333,9 +348,9 @@ def _make_coroutine_wrapper(func, replace_callback):
                                 'stack_context inconsistency (probably caused '
                                 'by yield within a "with StackContext" block)'))
                 except (StopIteration, Return) as e:
-                    future_set_result_unless_cancelled(future, _value_from_stopiteration(e))
+                    future_set_result_unless_cancelled(future, _value_from_stopiteration(e))  # 设置future返回值
                 except Exception:
-                    future_set_exc_info(future, sys.exc_info())
+                    future_set_exc_info(future, sys.exc_info())  # 报错，设置错误信息
                 else:
                     # Provide strong references to Runner objects as long
                     # as their result future objects also have strong
@@ -345,8 +360,11 @@ def _make_coroutine_wrapper(func, replace_callback):
                     # add_done_callback() instead of putting a private
                     # attribute on the Future.
                     # (Github issues #1769, #2229).
+                    # 只要他们的result future objects也具有强引用（通常来自父协程的Runner），就可以提供对Runner对象的强引用。
+                    # 这样可以保持协程的Runner存活，我们通过利用公共APIadd_done_callback（）
+                    # 而不是在Future上添加私有属性来实现此目的（Github问题＃1769，＃2229）。
                     runner = Runner(result, future, yielded)
-                    future.add_done_callback(lambda _: runner)
+                    future.add_done_callback(lambda _: runner)  # 添加回调，其实是要添加一个强引用保证runner对象一直存在
                 yielded = None
                 try:
                     return future
@@ -360,7 +378,7 @@ def _make_coroutine_wrapper(func, replace_callback):
                     # used in the absence of cycles).  We can avoid the
                     # cycle by clearing the local variable after we return it.
                     future = None
-        future_set_result_unless_cancelled(future, result)
+        future_set_result_unless_cancelled(future, result)  # 为future设置结果返回值
         return future
 
     wrapper.__wrapped__ = wrapped
@@ -996,6 +1014,7 @@ def with_timeout(timeout, future, quiet_exceptions=()):
     return result
 
 
+# sleep 协程，实际就是在ioloop中添加一个timeout任务
 def sleep(duration):
     """Return a `.Future` that resolves after the given number of seconds.
 
@@ -1016,11 +1035,13 @@ def sleep(duration):
     return f
 
 
+# 类似于以无结果结束的Future。
 class _NullFuture(object):
     """_NullFuture resembles a Future that finished with a result of None.
 
     It's not actually a `Future` to avoid depending on a particular event loop.
     Handled as a special case in the coroutine runner.
+    要避免依赖于特定的事件循环，实际上并不是“Future”。 作为协程跑步者的特殊情况处理。
     """
     def result(self):
         return None
@@ -1056,17 +1077,19 @@ class Runner(object):
     """Internal implementation of `tornado.gen.engine`.
 
     Maintains information about pending callbacks and their results.
+    维护有关挂起的回调及其结果的信息。
 
     The results of the generator are stored in ``result_future`` (a
+     生成器的结果存储在result_future（.Future）中。
     `.Future`)
     """
     def __init__(self, gen, result_future, first_yielded):
-        self.gen = gen
-        self.result_future = result_future
+        self.gen = gen  # 生成器
+        self.result_future = result_future  # future
         self.future = _null_future
         self.yield_point = None
-        self.pending_callbacks = None
-        self.results = None
+        self.pending_callbacks = None  # 回调函数set()
+        self.results = None  # 存放结果，{key：value, ...}
         self.running = False
         self.finished = False
         self.had_exception = False
@@ -1076,11 +1099,14 @@ class Runner(object):
         # semantics of YieldPoints, but not for Futures).  When we have
         # done so, this field will be set and must be called at the end
         # of the coroutine.
+        # 为了提高效率，我们只有等到YieldPoint时才创建堆栈上下文（YieldPoints的历史语义需要堆栈上下文，而Future则不需要）。
+        # 当我们这样做时，将设置此字段，并且必须在协程的末尾调用
         self.stack_context_deactivate = None
         if self.handle_yield(first_yielded):
             gen = result_future = first_yielded = None
             self.run()
 
+    # 在pending_callbacks中添加key
     def register_callback(self, key):
         """Adds ``key`` to the list of callbacks."""
         if self.pending_callbacks is None:
@@ -1091,30 +1117,33 @@ class Runner(object):
             raise KeyReuseError("key %r is already pending" % (key,))
         self.pending_callbacks.add(key)
 
+    # 检查key是否在pending_callbacks中
     def is_ready(self, key):
         """Returns true if a result is available for ``key``."""
         if self.pending_callbacks is None or key not in self.pending_callbacks:
             raise UnknownKeyError("key %r is not pending" % (key,))
         return key in self.results
 
+    # 为key设置result，并且尝试激活生成器
     def set_result(self, key, result):
         """Sets the result for ``key`` and attempts to resume the generator."""
         self.results[key] = result
-        if self.yield_point is not None and self.yield_point.is_ready():
+        if self.yield_point is not None and self.yield_point.is_ready():  # todo zzy
             try:
-                future_set_result_unless_cancelled(self.future,
+                future_set_result_unless_cancelled(self.future,  # 设置结果
                                                    self.yield_point.get_result())
             except:
-                future_set_exc_info(self.future, sys.exc_info())
+                future_set_exc_info(self.future, sys.exc_info())  # 设置异常
             self.yield_point = None
             self.run()
 
+    # 移除key的信息
     def pop_result(self, key):
         """Returns the result for ``key`` and unregisters it."""
         self.pending_callbacks.remove(key)
         return self.results.pop(key)
 
-    def run(self):
+    def run(self):  # todo zzy
         """Starts or resumes the generator, running until it reaches a
         yield point that is not ready.
         """
@@ -1182,10 +1211,12 @@ class Runner(object):
         finally:
             self.running = False
 
-    def handle_yield(self, yielded):
+    def handle_yield(self, yielded):  # todo zzy
         # Lists containing YieldPoints require stack contexts;
+        # 包含YieldPoints的列表需要堆栈上下文；
         # other lists are handled in convert_yielded.
-        if _contains_yieldpoint(yielded):
+        # 其他列表在convert_yielded中处理。
+        if _contains_yieldpoint(yielded):  # 检查是不是列表，并且存在yieldpoint对象
             yielded = multi(yielded)
 
         if isinstance(yielded, YieldPoint):
@@ -1238,10 +1269,12 @@ class Runner(object):
             return False
         return True
 
+    # 获取一个key的回调方法
     def result_callback(self, key):
         return stack_context.wrap(_argument_adapter(
             functools.partial(self.set_result, key)))
 
+    # 处理异常
     def handle_exception(self, typ, value, tb):
         if not self.running and not self.finished:
             self.future = Future()
@@ -1251,6 +1284,7 @@ class Runner(object):
         else:
             return False
 
+    # 停用堆栈上下文
     def _deactivate_stack_context(self):
         if self.stack_context_deactivate is not None:
             self.stack_context_deactivate()
@@ -1260,6 +1294,7 @@ class Runner(object):
 Arguments = collections.namedtuple('Arguments', ['args', 'kwargs'])
 
 
+# 包装一个方法，令其只有一个参数
 def _argument_adapter(callback):
     """Returns a function that when invoked runs ``callback`` with one arg.
 

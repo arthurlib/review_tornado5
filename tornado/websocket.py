@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Implementation of the WebSocket protocol.
 
 `WebSockets <http://dev.w3.org/html5/websockets/>`_ allow for bidirectional

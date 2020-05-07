@@ -1,4 +1,5 @@
-#
+## -*- coding: utf-8 -*-
+
 # Copyright 2009 Facebook
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -345,6 +346,7 @@ class BaseIOStream(object):
         """
         return None
 
+    # 异步读取，直到我们匹配了给定的正则表达式
     def read_until_regex(self, regex, callback=None, max_bytes=None):
         """Asynchronously read until we have matched the given regex.
         异步读取，直到我们匹配了给定的正则表达式

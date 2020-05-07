@@ -1,4 +1,5 @@
-#
+## -*- coding: utf-8 -*-
+
 # Copyright 2012 Facebook
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -303,7 +304,7 @@ class Future(object):
 		else:
 			self._callbacks.append(fn)  # 未完成就加入当前fulture的回调列表
 
-	# 设置返回值，标识完成
+	# 设置返回值，标识完成，回调函数放入ioloop
 	def set_result(self, result):
 		"""Sets the result of a ``Future``.
 
