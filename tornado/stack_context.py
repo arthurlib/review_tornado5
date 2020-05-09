@@ -92,7 +92,7 @@ class _State(threading.local):
 
 
 # 共享单例
-_state = _State()
+_state = _State()  # 在StackContext类中会被修改
 
 
 class StackContext(object):
@@ -295,10 +295,12 @@ def wrap(fn):  # todo zzy
 
     # Capture current stack head
     # TODO: Any other better way to store contexts and update them in wrapped function?
-    cap_contexts = [_state.contexts]
+    cap_contexts = [_state.contexts]  # 这里获取了一下 单例，为啥搞成列表
+    # self.contexts = (tuple(), None)
 
     if not cap_contexts[0][0] and not cap_contexts[0][1]:
         # Fast path when there are no active contexts.
+        # 没有活动上下文时直接走这里
         def null_wrapper(*args, **kwargs):
             try:
                 current_state = _state.contexts

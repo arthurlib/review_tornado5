@@ -63,6 +63,20 @@ from tornado.util import (
 try:
     import signal
 except ImportError:
+    signal = None
+
+try:
+    from concurrent.futures import ThreadPoolExecutor  # 启动并行任务
+except ImportError:
+    ThreadPoolExecutor = None
+
+if PY3:
+    import _thread as thread
+else:
+    import thread
+
+try:
+    import asyncio  # >=py3.4
 except ImportError:
     asyncio = None
 
