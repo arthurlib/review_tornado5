@@ -91,10 +91,11 @@ class _State(threading.local):
         self.contexts = (tuple(), None)
 
 
+# 在当前本版已经没有太大意义了，值不会改变
 # 共享单例
 _state = _State()  # 在StackContext类中会被修改
 
-
+# 在当前本版已经不会再使用到了
 class StackContext(object):
     """Establishes the given context as a StackContext that will be transferred.
 
@@ -279,6 +280,7 @@ def _remove_deactivated(contexts):
     return (stack_contexts, head)
 
 
+# 在当前本版意义不大了，实际上就是返回了原来的函数
 def wrap(fn):  # todo zzy
     """Returns a callable object that will restore the current `StackContext`
     when executed.
@@ -298,6 +300,7 @@ def wrap(fn):  # todo zzy
     cap_contexts = [_state.contexts]  # 这里获取了一下 单例，为啥搞成列表
     # self.contexts = (tuple(), None)
 
+    # 总是进入这里的逻辑
     if not cap_contexts[0][0] and not cap_contexts[0][1]:
         # Fast path when there are no active contexts.
         # 没有活动上下文时直接走这里
@@ -311,6 +314,7 @@ def wrap(fn):  # todo zzy
         null_wrapper._wrapped = True
         return null_wrapper
 
+    # 下面的逻辑不会执行到了
     def wrapped(*args, **kwargs):  # todo zzy
         ret = None
         try:

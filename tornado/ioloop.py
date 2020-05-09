@@ -776,7 +776,7 @@ class IOLoop(Configurable):
         只接受future对象
         """
         assert is_future(future)  # 检查
-        callback = stack_context.wrap(callback)  # todo zzy
+        callback = stack_context.wrap(callback)  # todo zzy  就是函数本身
         future_add_done_callback(  # 设置完成回调
             future, lambda future: self.add_callback(callback, future))
 
@@ -928,7 +928,7 @@ class PollIOLoop(IOLoop):
         if hasattr(self._impl, 'fileno'):
             set_close_exec(self._impl.fileno())
         self.time_func = time_func or time.time  # 获取时间的方法（时间戳：秒）
-        self._handlers = {}  # (obj, stack_context.wrap(handler))  todo zzy 结构是这样，但是含义还不懂
+        self._handlers = {}  # (obj, stack_context.wrap(handler))  （io对象， 回调函数）
         self._events = {}
         self._callbacks = collections.deque()  # 回调队列
         self._timeouts = []  # 延时队列
@@ -983,7 +983,8 @@ class PollIOLoop(IOLoop):
 
     def add_handler(self, fd, handler, events):
         fd, obj = self.split_fd(fd)  # 转换成元组
-        self._handlers[fd] = (obj, stack_context.wrap(handler))  # todo zzy 这个装饰器没懂
+        # 设置回调
+        self._handlers[fd] = (obj, stack_context.wrap(handler))  # todo zzy 就是函数本身
         self._impl.register(fd, events | self.ERROR)  # 注册监听事件，默认必监听err状态
 
     # 修改fd监听
@@ -1197,7 +1198,7 @@ class PollIOLoop(IOLoop):
         timeout = _Timeout(
             deadline,
             # functools.partial 封装函数，提供默认参数值
-            functools.partial(stack_context.wrap(callback), *args, **kwargs),  # todo zzy 对callback装饰一下，不懂
+            functools.partial(stack_context.wrap(callback), *args, **kwargs),  # todo zzy 就是函数本身
             self)
         heapq.heappush(self._timeouts, timeout)  # 将延迟对象，放入延迟队列
         return timeout
