@@ -339,9 +339,9 @@ def _make_coroutine_wrapper(func, replace_callback):
                 # 内联Runner.run的第一次迭代。 这样就避免了在协程实际产生时创建Runner的成本，
                 # 从而又使我们可以在关键路径代码中使用“可选”协程，而不会因同步情况而降低性能。
                 try:
-                    orig_stack_contexts = stack_context._state.contexts  # todo zzy 不懂放的具体是什么，以及该单例作用
+                    orig_stack_contexts = stack_context._state.contexts  # (tuple(), None)目前值不会变
                     yielded = next(result)  # 第一次激活生成器
-                    if stack_context._state.contexts is not orig_stack_contexts:
+                    if stack_context._state.contexts is not orig_stack_contexts:  # 总是不会执行
                         yielded = _create_future()
                         yielded.set_exception(
                             stack_context.StackContextInconsistentError(
@@ -363,11 +363,12 @@ def _make_coroutine_wrapper(func, replace_callback):
                     # 只要他们的result future objects也具有强引用（通常来自父协程的Runner），就可以提供对Runner对象的强引用。
                     # 这样可以保持协程的Runner存活，我们通过利用公共APIadd_done_callback（）
                     # 而不是在Future上添加私有属性来实现此目的（Github问题＃1769，＃2229）。
-                    runner = Runner(result, future, yielded)
+                    runner = Runner(result, future, yielded)  # (预激的协程，future， 第一次next的返回值)
+                    # 协程的future回调持有runner的强引用
                     future.add_done_callback(lambda _: runner)  # 添加回调，其实是要添加一个强引用保证runner对象一直存在
                 yielded = None
                 try:
-                    return future
+                    return future  # 如果是协程 就会返回future
                 finally:
                     # Subtle memory optimization: if next() raised an exception,
                     # the future's exc_info contains a traceback which
@@ -378,8 +379,8 @@ def _make_coroutine_wrapper(func, replace_callback):
                     # used in the absence of cycles).  We can avoid the
                     # cycle by clearing the local variable after we return it.
                     future = None
-        future_set_result_unless_cancelled(future, result)  # 为future设置结果返回值
-        return future
+        future_set_result_unless_cancelled(future, result)  # 如果是函数，为future设置结果返回值
+        return future  # 如果是函数会在这里返回，此时已经设置了结果
 
     wrapper.__wrapped__ = wrapped
     wrapper.__tornado_coroutine__ = True
@@ -737,6 +738,7 @@ def _contains_yieldpoint(children):
     return False
 
 
+# 等待多个futrue
 def multi(children, quiet_exceptions=()):
     """Runs multiple asynchronous operations in parallel.
 
@@ -787,7 +789,7 @@ def multi(children, quiet_exceptions=()):
        other than `YieldPoint` and `.Future`.
 
     """
-    if _contains_yieldpoint(children):
+    if _contains_yieldpoint(children):  # 如果都用future的话，这个不会被使用到
         return MultiYieldPoint(children, quiet_exceptions=quiet_exceptions)
     else:
         return multi_future(children, quiet_exceptions=quiet_exceptions)
@@ -796,6 +798,7 @@ def multi(children, quiet_exceptions=()):
 Multi = multi
 
 
+# 如果都用future的话，这个不会被使用到
 class MultiYieldPoint(YieldPoint):
     """Runs multiple asynchronous operations in parallel.
 
@@ -864,6 +867,7 @@ class MultiYieldPoint(YieldPoint):
             return list(result_list)
 
 
+# 等待多个future, 这个还比较容易看懂
 def multi_future(children, quiet_exceptions=()):
     """Wait for multiple asynchronous futures in parallel.
 
@@ -894,6 +898,7 @@ def multi_future(children, quiet_exceptions=()):
         future_set_result_unless_cancelled(future,
                                            {} if keys is not None else [])
 
+    # 需要同时等待的future全部注册同一个回调函数，当全部完成时，对新future设置结果
     def callback(f):
         unfinished_children.remove(f)
         if not unfinished_children:
@@ -1146,13 +1151,14 @@ class Runner(object):
     def run(self):  # todo zzy
         """Starts or resumes the generator, running until it reaches a
         yield point that is not ready.
+        启动或重新启动生成器，运行直到达到未准备好的yield点。
         """
         if self.running or self.finished:
             return
         try:
             self.running = True
             while True:
-                future = self.future
+                future = self.future  # 协程内的yield的future
                 if not future.done():
                     return
                 self.future = None
@@ -1175,14 +1181,14 @@ class Runner(object):
                             # for faster GC on CPython.
                             exc_info = None
                     else:
-                        yielded = self.gen.send(value)
+                        yielded = self.gen.send(value)  # 当前协程发送内部yield的future的返回值
 
                     if stack_context._state.contexts is not orig_stack_contexts:
                         self.gen.throw(
                             stack_context.StackContextInconsistentError(
                                 'stack_context inconsistency (probably caused '
                                 'by yield within a "with StackContext" block)'))
-                except (StopIteration, Return) as e:
+                except (StopIteration, Return) as e:  # 返回值了
                     self.finished = True
                     self.future = _null_future
                     if self.pending_callbacks and not self.had_exception:
@@ -1193,7 +1199,7 @@ class Runner(object):
                         raise LeakedCallbackError(
                             "finished without waiting for callbacks %r" %
                             self.pending_callbacks)
-                    future_set_result_unless_cancelled(self.result_future,
+                    future_set_result_unless_cancelled(self.result_future,  # 为当前协程设置运行返回值结果，此时当前协程执行结束
                                                        _value_from_stopiteration(e))
                     self.result_future = None
                     self._deactivate_stack_context()
@@ -1205,7 +1211,7 @@ class Runner(object):
                     self.result_future = None
                     self._deactivate_stack_context()
                     return
-                if not self.handle_yield(yielded):
+                if not self.handle_yield(yielded):  # 继续执行当前协程的下一次 yield
                     return
                 yielded = None
         finally:
@@ -1213,13 +1219,13 @@ class Runner(object):
 
     def handle_yield(self, yielded):  # todo zzy
         # Lists containing YieldPoints require stack contexts;
-        # 包含YieldPoints的列表需要堆栈上下文；
+        # 包含YieldPoints的列表需要堆栈上下文；  YieldPoint 是要被弃用的，使用future 代替
         # other lists are handled in convert_yielded.
         # 其他列表在convert_yielded中处理。
-        if _contains_yieldpoint(yielded):  # 检查是不是列表，并且存在yieldpoint对象
+        if _contains_yieldpoint(yielded):  # 检查是不是列表，并且存在yieldpoint对象 都用Future的话，这里应该不会执行
             yielded = multi(yielded)
 
-        if isinstance(yielded, YieldPoint):
+        if isinstance(yielded, YieldPoint):  # 如果都用Future的话，这里应该不会执行
             # YieldPoints are too closely coupled to the Runner to go
             # through the generic convert_yielded mechanism.
             self.future = Future()
@@ -1251,7 +1257,7 @@ class Runner(object):
                 start_yield_point()
         else:
             try:
-                self.future = convert_yielded(yielded)
+                self.future = convert_yielded(yielded)  # 转成future或可等待对象，list，dict的话就打包
             except BadYieldError:
                 self.future = Future()
                 future_set_exc_info(self.future, sys.exc_info())
@@ -1264,10 +1270,10 @@ class Runner(object):
                 # Break a reference cycle to speed GC.
                 f = None  # noqa
                 self.run()
-            self.io_loop.add_future(
-                self.future, inner)
+            self.io_loop.add_future(  # 为futrue设置完成时的回调,回调方法里把当前回调放入ioloop
+                self.future, inner)  # 这里的future实际是协程内部 yield 出来的，它完成的时候回调inner.run,就可以激活协程，Runner包裹了当前协程和内部yield出来的future
             return False
-        return True
+        return True  # future完成了才会返回True，如果是first_yield是value不是future走这里
 
     # 获取一个key的回调方法
     def result_callback(self, key):
@@ -1392,11 +1398,11 @@ def convert_yielded(yielded):
     elif yielded is _null_future:
         return _null_future
     elif isinstance(yielded, (list, dict)):
-        return multi(yielded)
+        return multi(yielded)  # todo zzy 这里要看看
     elif is_future(yielded):
         return yielded
     elif isawaitable(yielded):
-        return _wrap_awaitable(yielded)
+        return _wrap_awaitable(yielded)  # todo zzy 这个也看看
     else:
         raise BadYieldError("yielded unknown object %r" % (yielded,))
 

@@ -762,7 +762,7 @@ class IOLoop(Configurable):
         with stack_context.NullContext():
             self.add_callback(callback, *args, **kwargs)
 
-    # 添加一个future对象到ioloop
+    # 为future添加完成时的回调
     def add_future(self, future, callback):
         """Schedules a callback on the ``IOLoop`` when the given
         `.Future` is finished.
@@ -776,9 +776,10 @@ class IOLoop(Configurable):
         只接受future对象
         """
         assert is_future(future)  # 检查
-        callback = stack_context.wrap(callback)  # todo zzy  就是函数本身
-        future_add_done_callback(  # 设置完成回调
-            future, lambda future: self.add_callback(callback, future))
+        callback = stack_context.wrap(callback)  # 就是函数本身
+        future_add_done_callback(  # 设置future完成回调
+            future, lambda future: self.add_callback(callback, future))  # self.add_callback 这个才是真的把回调设置到ioloop中，当future完成后
+        # lambda future: self.add_callback(callback, future)  这是一个中间函数，它会进入ioloop，执行后，最终要执行的callback才进入ioloop
 
     # 阻塞调用， 基于线程池/进程池
     def run_in_executor(self, executor, func, *args):
@@ -1214,7 +1215,7 @@ class PollIOLoop(IOLoop):
         timeout.callback = None
         self._cancellations += 1
 
-    # 添加回调函数
+    # 添加回调函数到ioloop
     def add_callback(self, callback, *args, **kwargs):
         if self._closing:  # ioloop是close状态
             return
@@ -1223,11 +1224,11 @@ class PollIOLoop(IOLoop):
         # deque.append 是原子操作，只管append就行
         self._callbacks.append(functools.partial(  # 把cb_fun放入回调队列
             stack_context.wrap(callback), *args, **kwargs))
-        if thread.get_ident() != self._thread_ident:  # 当前线程不是ioloop线程
+        if thread.get_ident() != self._thread_ident:  # 当前线程不是ioloop线程(可能开了多线程)
             # This will write one byte but Waker.consume() reads many
             # at once, so it's ok to write even when not strictly
             # necessary.
-            self._waker.wake()
+            self._waker.wake()  # 唤醒ioloop，向通道写入数据，
         else:
             # If we're on the IOLoop's thread, we don't need to wake anyone.
             pass

@@ -365,7 +365,7 @@ class Future(object):
 			from tornado.ioloop import IOLoop
 			loop = IOLoop.current()
 			for cb in self._callbacks:
-				loop.add_callback(cb, self)
+				loop.add_callback(cb, self)  # 放入ioloop的回调
 			self._callbacks = None  # 清空回调序列
 
 	# On Python 3.3 or older, objects with a destructor part of a reference
