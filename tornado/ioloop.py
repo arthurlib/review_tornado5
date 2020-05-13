@@ -844,7 +844,7 @@ class IOLoop(Configurable):
         """Avoid unhandled-exception warnings from spawned coroutines."""
         future.result()
 
-    # 处理cl_func出现异常的时候，可覆盖该方法， asyncio库会覆盖次方法，6.0中会移除
+    # 处理cl_func出现异常的时候，可覆盖该方法， asyncio库会覆盖此方法，6.0中会移除
     def handle_callback_exception(self, callback):
         """This method is called whenever a callback run by the `IOLoop`
         throws an exception.

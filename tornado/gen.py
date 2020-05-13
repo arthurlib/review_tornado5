@@ -540,7 +540,7 @@ class WaitIterator(object):
             raise getattr(builtins, 'StopAsyncIteration')()
         return self.next()
 
-
+# 将被弃用
 class YieldPoint(object):
     """Base class for objects that may be yielded from the generator.
 
@@ -574,7 +574,7 @@ class YieldPoint(object):
         """
         raise NotImplementedError()
 
-
+# 将被弃用
 class Callback(YieldPoint):
     """Returns a callable object that will allow a matching `Wait` to proceed.
 
@@ -605,7 +605,7 @@ class Callback(YieldPoint):
     def get_result(self):
         return self.runner.result_callback(self.key)
 
-
+# 将被弃用
 class Wait(YieldPoint):
     """Returns the argument passed to the result of a previous `Callback`.
 
@@ -626,7 +626,7 @@ class Wait(YieldPoint):
     def get_result(self):
         return self.runner.pop_result(self.key)
 
-
+# 将被弃用
 class WaitAll(YieldPoint):
     """Returns the results of multiple previous `Callbacks <Callback>`.
 
@@ -686,7 +686,7 @@ def Task(func, *args, **kwargs):
         func(*args, callback=_argument_adapter(set_result), **kwargs)
     return future
 
-
+# 将被弃用
 class YieldFuture(YieldPoint):
     def __init__(self, future):
         """Adapts a `.Future` to the `YieldPoint` interface.
@@ -798,7 +798,7 @@ def multi(children, quiet_exceptions=()):
 Multi = multi
 
 
-# 如果都用future的话，这个不会被使用到
+# # 将被弃用  如果都用future的话，这个不会被使用到
 class MultiYieldPoint(YieldPoint):
     """Runs multiple asynchronous operations in parallel.
 
@@ -949,6 +949,7 @@ def maybe_future(x):
         return fut
 
 
+# 为future任务设置超时时间 的处理逻辑
 def with_timeout(timeout, future, quiet_exceptions=()):
     """Wraps a `.Future` (or other yieldable object) in a timeout.
 
@@ -985,38 +986,38 @@ def with_timeout(timeout, future, quiet_exceptions=()):
     # one waiting on the input future, so cancelling it might disrupt other
     # callers and B) concurrent futures can only be cancelled while they are
     # in the queue, so cancellation cannot reliably bound our waiting time.
-    future = convert_yielded(future)
-    result = _create_future()
-    chain_future(future, result)
+    future = convert_yielded(future)  # 传入的future
+    result = _create_future()  # 新建一个future
+    chain_future(future, result)  # 两个future绑定一下
     io_loop = IOLoop.current()
 
     def error_callback(future):
         try:
-            future.result()
+            future.result()  # 尝试获取一下所需值，并不使用，可能报错
         except Exception as e:
-            if not isinstance(e, quiet_exceptions):
+            if not isinstance(e, quiet_exceptions):  # 静默报错就不显示了
                 app_log.error("Exception in Future %r after timeout",
                               future, exc_info=True)
 
-    def timeout_callback():
-        if not result.done():
-            result.set_exception(TimeoutError("Timeout"))
+    def timeout_callback():  # 超时回调
+        if not result.done():  # 如果没有完成
+            result.set_exception(TimeoutError("Timeout"))  # 设置错误信息
         # In case the wrapped future goes on to fail, log it.
-        future_add_done_callback(future, error_callback)
+        future_add_done_callback(future, error_callback)  # 为传入的future设置错误回调
     timeout_handle = io_loop.add_timeout(
-        timeout, timeout_callback)
+        timeout, timeout_callback)  # 向ioloop添加一个延时任务
     if isinstance(future, Future):
         # We know this future will resolve on the IOLoop, so we don't
         # need the extra thread-safety of IOLoop.add_future (and we also
         # don't care about StackContext here.
-        future_add_done_callback(
+        future_add_done_callback(  # 设置回调，当传入的future完成时，移除超时的延时任务
             future, lambda future: io_loop.remove_timeout(timeout_handle))
     else:
         # concurrent.futures.Futures may resolve on any thread, so we
         # need to route them back to the IOLoop.
         io_loop.add_future(
             future, lambda future: io_loop.remove_timeout(timeout_handle))
-    return result
+    return result  # 返回future
 
 
 # sleep 协程，实际就是在ioloop中添加一个timeout任务
@@ -1148,7 +1149,8 @@ class Runner(object):
         self.pending_callbacks.remove(key)
         return self.results.pop(key)
 
-    def run(self):  # todo zzy
+    # 协程中的yield出来的future回回调这个方法，从而激活协程
+    def run(self):
         """Starts or resumes the generator, running until it reaches a
         yield point that is not ready.
         启动或重新启动生成器，运行直到达到未准备好的yield点。
@@ -1159,7 +1161,7 @@ class Runner(object):
             self.running = True
             while True:
                 future = self.future  # 协程内的yield的future
-                if not future.done():
+                if not future.done():  # 在这里会跳出循环
                     return
                 self.future = None
                 try:
@@ -1175,7 +1177,7 @@ class Runner(object):
 
                     if exc_info is not None:
                         try:
-                            yielded = self.gen.throw(*exc_info)
+                            yielded = self.gen.throw(*exc_info)  # 抛出错误
                         finally:
                             # Break up a reference to itself
                             # for faster GC on CPython.

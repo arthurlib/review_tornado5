@@ -137,6 +137,8 @@ class _TracebackLogger(object):
 		self.formatted_tb = None
 
 	def __del__(self, is_finalizing=is_finalizing):
+		# >= 3.4 的统一报错在asyncio.Future中定义
+		# 此处统一错误日志打印统一日志  # <=py3.3
 		if not is_finalizing() and self.formatted_tb:
 			app_log.error('Future exception was never retrieved: %s',
 			              ''.join(self.formatted_tb).rstrip())
@@ -267,7 +269,7 @@ class Future(object):
 			return self._result
 		if self._exc_info is not None:
 			try:
-				raise_exc_info(self._exc_info)
+				raise_exc_info(self._exc_info)  # 抛出错误raise error, py2和py3逻辑有点不一样，但都是报错
 			finally:
 				self = None
 		self._check_done()
@@ -610,11 +612,14 @@ def _non_deprecated_return_future(f, warn=False):
 	return wrapper
 
 # 绑定两个 futures，a完成了，那么把b也设置成完成
+# a会把成功或失败的结果 复制到b
+# todo zzy 看操作
 def chain_future(a, b):
 	"""Chain two futures together so that when one completes, so does the other.
 
 	The result (success or failure) of ``a`` will be copied to ``b``, unless
 	``b`` has already been completed or cancelled by the time ``a`` finishes.
+	a会把成功或失败的结果 复制到b
 
 	.. versionchanged:: 5.0
 

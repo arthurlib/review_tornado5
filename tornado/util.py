@@ -200,7 +200,7 @@ def exec_in(code, glob, loc=None):
         code = compile(code, '<string>', 'exec', dont_inherit=True)
     exec(code, glob, loc)
 
-
+# raise_exc_info的具体实现
 if PY3:
     exec("""
 def raise_exc_info(exc_info):

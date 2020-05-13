@@ -100,6 +100,7 @@ class StreamClosedError(IOError):
     .. versionchanged:: 4.3
        Added the ``real_error`` attribute.
     """
+
     def __init__(self, real_error=None):
         super(StreamClosedError, self).__init__('Stream is closed')
         self.real_error = real_error
@@ -133,7 +134,7 @@ class _StreamBuffer(object):
         # Position in the first buffer
         # 在第一个缓冲区中的位置
         self._first_pos = 0
-        self._size = 0  # 缓冲长度
+        self._size = 0  # 队列中所有的缓冲长度
 
     def __len__(self):
         return self._size
@@ -149,21 +150,22 @@ class _StreamBuffer(object):
         附加给定的数据（应该是与缓冲区兼容的对象）
         """
         size = len(data)
-        if size > self._large_buf_threshold:
+        if size > self._large_buf_threshold:  # 如果要添加的数据量大于给定的最大值
             if not isinstance(data, memoryview):
                 # memoryview() 函数返回给定参数的内存查看对象
                 # 所谓内存查看对象，是指对支持缓冲区协议的数据进行包装，在不需要复制对象基础上允许Python代码访问
                 data = memoryview(data)
+            # 单独append的队列中
             self._buffers.append((True, data))
-        elif size > 0:
-            if self._buffers:
-                is_memview, b = self._buffers[-1]
-                new_buf = is_memview or len(b) >= self._large_buf_threshold
+        elif size > 0:  # 数据量大于0小于最大限定值
+            if self._buffers:  # 队列有值
+                is_memview, b = self._buffers[-1]  # 拿最后一个值
+                new_buf = is_memview or len(b) >= self._large_buf_threshold  # 判断是不是要新开一个缓存放入队列
             else:
                 new_buf = True
             if new_buf:
-                self._buffers.append((False, bytearray(data)))
-            else:
+                self._buffers.append((False, bytearray(data)))  # 需要就append一个新缓冲到队列尾
+            else:  # 不需要就添加到队列最后一个缓冲的末尾
                 b += data
 
         self._size += size
@@ -181,6 +183,7 @@ class _StreamBuffer(object):
             return memoryview(b'')
 
         pos = self._first_pos
+        # 下面就是分片获取第一个缓冲区的数据
         if is_memview:
             return b[pos:pos + size]
         else:
@@ -189,7 +192,7 @@ class _StreamBuffer(object):
     def advance(self, size):
         """
         Advance the current buffer position by ``size`` bytes.
-        将当前缓冲区的位置提前``size''个字节。
+        将当前缓冲区的位置提前``size''个字节。，把队列中的缓冲数据，整体提前size字节，(丢弃前size字节)
         """
         assert 0 < size <= self._size
         self._size -= size
@@ -218,10 +221,13 @@ class _StreamBuffer(object):
         self._first_pos = pos
 
 
+# todo zzy 重要看懂
 class BaseIOStream(object):
     """A utility class to write to and read from a non-blocking file or socket.
+    实用程序类，用于在非阻塞的文件或套接字 读取或写入
 
     We support a non-blocking ``write()`` and a family of ``read_*()`` methods.
+    我们支持无阻塞的write（）和一系列read _ *（）方法。
     All of the methods take an optional ``callback`` argument and return a
     `.Future` only if no callback is given.  When the operation completes,
     the callback will be run or the `.Future` will resolve with the data
@@ -232,10 +238,14 @@ class BaseIOStream(object):
 
     When a stream is closed due to an error, the IOStream's ``error``
     attribute contains the exception object.
+     当流由于错误而关闭时，IOStream的“错误” 属性包含异常对象。
 
     Subclasses must implement `fileno`, `close_fd`, `write_to_fd`,
     `read_from_fd`, and optionally `get_fd_error`.
+    子类必须实现`fileno`，`close_fd`，`write_to_fd`，
+     read_from_fd，以及可选的get_fd_error。
     """
+
     def __init__(self, max_buffer_size=None,
                  read_chunk_size=None, max_write_buffer_size=None):
         """`BaseIOStream` constructor.
@@ -276,7 +286,7 @@ class BaseIOStream(object):
         self._read_delimiter = None
         self._read_regex = None
         self._read_max_bytes = None
-        self._read_bytes = None
+        self._read_bytes = None  # 准备要读取的字节数
         self._read_partial = False
         self._read_until_close = False
         self._read_callback = None
@@ -374,7 +384,7 @@ class BaseIOStream(object):
            回调参数会被移除
 
         """
-        future = self._set_read_callback(callback)
+        future = self._set_read_callback(callback)  # 存在callback就是为了兼容，新一点的用法就是传入None
         self._read_regex = re.compile(regex)
         self._read_max_bytes = max_bytes
         try:
@@ -392,8 +402,10 @@ class BaseIOStream(object):
             raise
         return future
 
+    # 异步读取,直到找到给定的定界符
     def read_until(self, delimiter, callback=None, max_bytes=None):
         """Asynchronously read until we have found the given delimiter.
+        异步阅读，直到找到给定的定界符。
 
         The result includes all the data read including the delimiter.
         If a callback is given, it will be run with the data as an argument;
@@ -428,9 +440,11 @@ class BaseIOStream(object):
             raise
         return future
 
+    # 异步读取多个字节
     def read_bytes(self, num_bytes, callback=None, streaming_callback=None,
                    partial=False):
         """Asynchronously read a number of bytes.
+        异步读取多个字节
 
         If a ``streaming_callback`` is given, it will be called with chunks
         of data as they become available, and the final result will be empty.
@@ -440,6 +454,7 @@ class BaseIOStream(object):
 
         If ``partial`` is true, the callback is run as soon as we have
         any bytes to return (but never more than ``num_bytes``)
+        如果``partial''为true，则在我们有任何要返回的字节（但不超过``num_bytes''）的情况下立即运行回调
 
         .. versionchanged:: 4.0
             Added the ``partial`` argument.  The callback argument is now
@@ -455,7 +470,7 @@ class BaseIOStream(object):
         """
         future = self._set_read_callback(callback)
         assert isinstance(num_bytes, numbers.Integral)
-        self._read_bytes = num_bytes
+        self._read_bytes = num_bytes  # 设置要读取的字节数
         self._read_partial = partial
         if streaming_callback is not None:
             warnings.warn("streaming_callback is deprecated, use partial instead",
@@ -469,6 +484,7 @@ class BaseIOStream(object):
             raise
         return future
 
+    # 读取数据放入给定的buf中
     def read_into(self, buf, callback=None, partial=False):
         """Asynchronously read a number of bytes.
 
@@ -479,6 +495,7 @@ class BaseIOStream(object):
         If ``partial`` is true, the callback is run as soon as any bytes
         have been read.  Otherwise, it is run when the ``buf`` has been
         entirely filled with read data.
+        如果``partial''为true，则在读取任何字节后立即运行回调。 否则，当“ buf”已完全充满读取数据时运行。
 
         .. versionadded:: 5.0
 
@@ -519,6 +536,7 @@ class BaseIOStream(object):
             raise
         return future
 
+    # 一直读到close
     def read_until_close(self, callback=None, streaming_callback=None):
         """Asynchronously reads all data from the socket until it is closed.
 
@@ -716,6 +734,7 @@ class BaseIOStream(object):
         """
         pass
 
+    # 所有状态的事件回调
     def _handle_events(self, fd, events):
         if self.closed():
             gen_log.warning("Got events for closed stream %s", fd)
@@ -787,6 +806,7 @@ class BaseIOStream(object):
                 raise
             finally:
                 self._maybe_add_error_listener()
+
         # We schedule callbacks to be run on the next IOLoop iteration
         # rather than running them directly for several reasons:
         # * Prevents unbounded stack growth when a callback calls an
@@ -879,6 +899,7 @@ class BaseIOStream(object):
         else:
             self._maybe_run_close_callback()
 
+    # 设置读取后的回调函数,返回future，要打开看代码，做了兼容有点不一样
     def _set_read_callback(self, callback):
         assert self._read_callback is None, "Already reading"
         assert self._read_future is None, "Already reading"
@@ -887,7 +908,7 @@ class BaseIOStream(object):
                           DeprecationWarning)
             self._read_callback = stack_context.wrap(callback)
         else:
-            self._read_future = Future()
+            self._read_future = Future()  # 这里是直接返回future，不大一样，设置了self的future
         return self._read_future
 
     def _run_read_callback(self, size, streaming):
@@ -919,12 +940,15 @@ class BaseIOStream(object):
             # afterwards.  If we didn't, we have to do it now.
             self._maybe_add_error_listener()
 
+    # todo zzy 这个方法有点骚
     def _try_inline_read(self):
         """Attempt to complete the current read operation from buffered data.
+        尝试从缓冲的数据中完成当前的读取操作。
 
         If the read can be completed without blocking, schedules the
         read callback on the next IOLoop iteration; otherwise starts
         listening for reads on the socket.
+        如果可以不阻塞地完成读取，则安排在下一个IOLoop迭代中读取回调； 否则开始监听套接字上的读取
         """
         # See if we've already got the data from a previous read
         self._run_streaming_callback()
@@ -1024,8 +1048,8 @@ class BaseIOStream(object):
         or None if it cannot.
         """
         if (self._read_bytes is not None and
-            (self._read_buffer_size >= self._read_bytes or
-             (self._read_partial and self._read_buffer_size > 0))):
+                (self._read_buffer_size >= self._read_bytes or
+                 (self._read_partial and self._read_buffer_size > 0))):
             num_bytes = min(self._read_bytes, self._read_buffer_size)
             return num_bytes
         elif self._read_delimiter is not None:
@@ -1119,8 +1143,8 @@ class BaseIOStream(object):
         assert loc <= self._read_buffer_size
         # Slice the bytearray buffer into bytes, without intermediate copying
         b = (memoryview(self._read_buffer)
-             [self._read_buffer_pos:self._read_buffer_pos + loc]
-             ).tobytes()
+        [self._read_buffer_pos:self._read_buffer_pos + loc]
+        ).tobytes()
         self._read_buffer_pos += loc
         self._read_buffer_size -= loc
         # Amortized O(1) shrink
@@ -1151,6 +1175,7 @@ class BaseIOStream(object):
                   self._close_callback is not None):
                 self._add_io_state(ioloop.IOLoop.READ)
 
+    # 设置io对象的监听事件
     def _add_io_state(self, state):
         """Adds `state` (IOLoop.{READ,WRITE} flags) to our event handler.
 
@@ -1193,6 +1218,7 @@ class BaseIOStream(object):
                 errno_from_exception(exc) in _ERRNO_CONNRESET)
 
 
+# todo zzy 重要看懂
 class IOStream(BaseIOStream):
     r"""Socket-based `IOStream` implementation.
 
@@ -1240,6 +1266,7 @@ class IOStream(BaseIOStream):
        :hide:
 
     """
+
     def __init__(self, socket, *args, **kwargs):
         self.socket = socket
         self.socket.setblocking(False)
@@ -1349,6 +1376,7 @@ class IOStream(BaseIOStream):
         self._add_io_state(self.io_loop.WRITE)
         return future
 
+    # 尝试ssl连接
     def start_tls(self, server_side, ssl_options=None, server_hostname=None):
         """Convert this `IOStream` to an `SSLIOStream`.
 
@@ -1408,6 +1436,7 @@ class IOStream(BaseIOStream):
 
         future = Future()
         ssl_stream = SSLIOStream(socket, ssl_options=ssl_options)
+
         # Wrap the original close callback so we can fail our Future as well.
         # If we had an "unwrap" counterpart to this method we would need
         # to restore the original callback after our Future resolves
@@ -1427,6 +1456,7 @@ class IOStream(BaseIOStream):
                 future.set_exception(ssl_stream.error or StreamClosedError())
             if orig_close_callback is not None:
                 orig_close_callback()
+
         ssl_stream.set_close_callback(close_callback)
         ssl_stream._ssl_connect_callback = lambda: future.set_result(ssl_stream)
         ssl_stream.max_buffer_size = self.max_buffer_size
@@ -1476,6 +1506,7 @@ class IOStream(BaseIOStream):
                     raise
 
 
+# todo zzy 重要看懂
 class SSLIOStream(IOStream):
     """A utility class to write to and read from a non-blocking SSL socket.
 
@@ -1487,6 +1518,7 @@ class SSLIOStream(IOStream):
     before constructing the `SSLIOStream`.  Unconnected sockets will be
     wrapped when `IOStream.connect` is finished.
     """
+
     def __init__(self, *args, **kwargs):
         """The ``ssl_options`` keyword argument may either be an
         `ssl.SSLContext` object or a dictionary of keywords arguments
@@ -1735,12 +1767,16 @@ class SSLIOStream(IOStream):
 
 class PipeIOStream(BaseIOStream):
     """Pipe-based `IOStream` implementation.
+    基于管道的`IOStream`实现
 
     The constructor takes an integer file descriptor (such as one returned
     by `os.pipe`) rather than an open file object.  Pipes are generally
     one-way, so a `PipeIOStream` can be used for reading or writing but not
     both.
+    构造函数采用整数文件描述符（例如返回的一个通过`os.pipe`）而不是打开文件对象。
+    管道一般单向的，因此`PipeIOStream`可以用于读取或写入，但不能同时读写
     """
+
     def __init__(self, fd, *args, **kwargs):
         self.fd = fd
         self._fio = io.FileIO(self.fd, "r+")
