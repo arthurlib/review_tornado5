@@ -144,6 +144,10 @@ class IOLoop(Configurable):
     try to become current and it raises an error if there is already a
     current instance. If ``make_current=False``, the new `IOLoop` will
     not try to become current.
+    默认情况下，除非已经存在当前的“ IOLoop”，否则新构造的“ IOLoop”将成为线程的当前“ IOLoop”。
+    可以通过IOLoop构造函数的make_current参数来控制此行为：
+    如果make_current = True，新的IOLoop将始终尝试变为当前状态，
+    如果已经存在当前实例，则会引发错误。 如果make_current = False，新的IOLoop将不会尝试成为最新的。
 
     In general, an `IOLoop` cannot survive a fork or be shared across
     processes in any way. When multiple processes are being used, each
@@ -375,6 +379,7 @@ class IOLoop(Configurable):
 
     # 初始化
     def initialize(self, make_current=None):
+        # make_current=False 的时候，这里的逻辑都不执行
         if make_current is None:
             if IOLoop.current(instance=False) is None:  # 尝试获取已有的ioloop
                 # 之前不存在，就创建一个ioloop
@@ -382,7 +387,7 @@ class IOLoop(Configurable):
         elif make_current:
             current = IOLoop.current(instance=False)  # 尝试获取已有的ioloop
             # AsyncIO loops can already be current by this point.
-            if current is not None and current is not self:  # 存在一个ioloop，如果不是本身则报错
+            if current is not None and current is not self:  # 存在一个ioloop，如果不是本身则报错, 就是不让替换原有的ioloop
                 raise RuntimeError("current IOLoop already exists")
             self.make_current()
 
@@ -1127,7 +1132,7 @@ class PollIOLoop(IOLoop):
                     # No timeouts and no callbacks, so use the default.
                     poll_timeout = _POLL_TIMEOUT
 
-                if not self._running:
+                if not self._running:  # 当self.stop时，会在这里跳出死循环
                     break
 
                 if self._blocking_signal_threshold is not None:
@@ -1136,7 +1141,10 @@ class PollIOLoop(IOLoop):
                     signal.setitimer(signal.ITIMER_REAL, 0, 0)
 
                 try:
+                    # print("1111")
+                    # self._waker.wake()
                     event_pairs = self._impl.poll(poll_timeout)
+                    # print("222")
                 except Exception as e:
                     # Depending on python version and IOLoop implementation,
                     # different exception types may be thrown and there are
@@ -1184,11 +1192,11 @@ class PollIOLoop(IOLoop):
             if old_wakeup_fd is not None:
                 signal.set_wakeup_fd(old_wakeup_fd)
 
-    # 停止ioloop
+    # 停止ioloop，只是标识停止（标志当前任务结束）
     def stop(self):
         self._running = False  # 标识不运行
         self._stopped = True  # 标识停止
-        self._waker.wake()  # todo zzy
+        self._waker.wake()  # todo zzy 向管道里面写数据，唤醒select，然后ioloop继续运行
 
     # 获取时间戳
     def time(self):
@@ -1228,7 +1236,7 @@ class PollIOLoop(IOLoop):
             # This will write one byte but Waker.consume() reads many
             # at once, so it's ok to write even when not strictly
             # necessary.
-            self._waker.wake()  # 唤醒ioloop，向通道写入数据，
+            self._waker.wake()  # 唤醒ioloop，向通道写入数据，这就是ioloop本身阻塞，但是运行起来却不会阻塞的原因
         else:
             # If we're on the IOLoop's thread, we don't need to wake anyone.
             pass

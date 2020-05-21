@@ -52,7 +52,7 @@ from tornado import gen, httputil, stack_context
 from tornado.ioloop import IOLoop
 from tornado.util import Configurable
 
-
+# 同步http客户端，实际也是用了异步客户端和创建一个新的ioloop对象
 class HTTPClient(object):
     """A blocking HTTP client.
 
@@ -87,7 +87,7 @@ class HTTPClient(object):
         # so that an exception raised here doesn't lead to confusing
         # failures in __del__.
         self._closed = True
-        self._io_loop = IOLoop(make_current=False)
+        self._io_loop = IOLoop(make_current=False)  # 这里新创建了一个ioloop，并且不替换主ioloop
         if async_client_class is None:
             async_client_class = AsyncHTTPClient
         # Create the client while our IOLoop is "current", without
@@ -121,6 +121,7 @@ class HTTPClient(object):
         return response
 
 
+# 异步http客户端使用入口
 class AsyncHTTPClient(Configurable):
     """An non-blocking HTTP client.
 
@@ -144,10 +145,16 @@ class AsyncHTTPClient(Configurable):
     the `AsyncHTTPClient` constructor. The implementation subclass as
     well as arguments to its constructor can be set with the static
     method `configure()`
+    此类的构造方法在几个方面具有魔力：实际创建特定于实现的子类的实例，并且实例作为一种伪单例（每个`.IOLoop`）被重用。
+    关键字参数``force_instance = True''可用于抑制这种单例行为。
+    除非使用force_instance = True，否则不应将任何参数传递给AsyncHTTPClient构造函数。
+    可以使用staticmethodconfigure（）设置实现子类及其构造函数的参数。
 
     All `AsyncHTTPClient` implementations support a ``defaults``
     keyword argument, which can be used to set default values for
-    `HTTPRequest` attributes.  For example::
+    `HTTPRequest` attributes.
+    所有的“ AsyncHTTPClient”实现都支持“ defaults”关键字参数，该参数可用于设置“ HTTPRequest”属性的默认值。
+    For example::
 
         AsyncHTTPClient.configure(
             None, defaults=dict(user_agent="MyUserAgent"))
@@ -163,18 +170,20 @@ class AsyncHTTPClient(Configurable):
     def configurable_base(cls):
         return AsyncHTTPClient
 
+    # 默认返回的对象是SimpleAsyncHTTPClient
     @classmethod
     def configurable_default(cls):
         from tornado.simple_httpclient import SimpleAsyncHTTPClient
         return SimpleAsyncHTTPClient
 
     @classmethod
-    def _async_clients(cls):
+    def _async_clients(cls):  # 设置全局弱引用，可复用一个AsyncHTTPClient对象
         attr_name = '_async_client_dict_' + cls.__name__
         if not hasattr(cls, attr_name):
             setattr(cls, attr_name, weakref.WeakKeyDictionary())
         return getattr(cls, attr_name)
 
+    # force_instance为False时，复用已有的， force_instance为True时，创建新对象且不缓存
     def __new__(cls, force_instance=False, **kwargs):
         io_loop = IOLoop.current()
         if force_instance:
@@ -193,6 +202,7 @@ class AsyncHTTPClient(Configurable):
             instance_cache[instance.io_loop] = instance
         return instance
 
+    # 初始化一些属性
     def initialize(self, defaults=None):
         self.io_loop = IOLoop.current()
         self.defaults = dict(HTTPRequest._DEFAULTS)
@@ -293,7 +303,7 @@ class AsyncHTTPClient(Configurable):
                 if response.error and not response._error_is_response_code:
                     warnings.warn("raise_error=False will allow '%s' to be raised in the future" %
                                   response.error, DeprecationWarning)
-                future_set_result_unless_cancelled(future, response)
+                future_set_result_unless_cancelled(future, response)  # 设置返回的 response
         self.fetch_impl(request, handle_response)
         return future
 

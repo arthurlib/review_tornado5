@@ -1,3 +1,9 @@
+from tornado.gen import sleep, _create_future
+
+from tornado.concurrent import Future
+
+from tornado.httpclient import HTTPClient, AsyncHTTPClient
+
 from tornado import web, ioloop, gen
 import datetime
 import tornado
@@ -48,11 +54,35 @@ def p2s():
     return 'local done'
 
 
+# @gen.coroutine
+def gg():
+    # f = _create_future()
+    # ioloop.IOLoop.instance().add_callback(lambda: f.set_result(354354))
+    # return f
+    # sleep(1)
+    # ioloop.IOLoop.instance().add_callback(lambda: 2)
+    pass
+
+
 @gen.coroutine
 def main():
     a = yield run_task_at2(p2s, "2020-05-11 10:07:00")
     print(a)
+    a = HTTPClient()
+    c = a.fetch('https://www.baidu.com')
+    print(c)
+    # a = yield run_task_at2(p2s, "2020-05-11 10:07:00")
+    # a = yield gg()
+    # print('*****')
+    # print(a)
     # yield gen.sleep(0)
+
+
+@gen.coroutine
+def test():
+    http_client = AsyncHTTPClient()
+    result = yield http_client.fetch('https://www.baidu.com')
+    print(result.body)
 
 
 if __name__ == '__main__':
@@ -60,10 +90,15 @@ if __name__ == '__main__':
     #     (r'/', MainHandler),
     # ])
     # application.listen(8081)
-    main()
+    # dd = main()
+    test()
+    # print('dd' + str(dd))
+    # for i in dd:
+    #     print(i)
     # run_task_after(p2s, 2)
     # run_task_loop(p2s, 2000)
     # ioloop.IOLoop.current().spawn_callback(lambda: run_task_after2(p2s, 4))
     # ioloop.IOLoop.current().spawn_callback(lambda: run_task_at2(p2s, "2020-03-26 19:24:00"))
     # ioloop.IOLoop.current().spawn_callback(lambda: run_task_at2(p2s, "2020-03-26 19:24:00"))
-    ioloop.IOLoop.instance().start()
+    ioloop2 = ioloop.IOLoop.instance()
+    ioloop2.start()

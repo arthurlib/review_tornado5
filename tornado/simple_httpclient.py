@@ -70,6 +70,7 @@ class HTTPStreamClosedError(HTTPError):
         return self.message
 
 
+# todo zzy 实际使用的异步http客户端
 class SimpleAsyncHTTPClient(AsyncHTTPClient):
     """Non-blocking HTTP client with no external dependencies.
 
