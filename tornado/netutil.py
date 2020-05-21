@@ -78,6 +78,7 @@ if hasattr(errno, "WSAEWOULDBLOCK"):
 _DEFAULT_BACKLOG = 128
 
 
+# socket 监听，ipv4和ipv6，如果给定地址映射到多个IP地址，则返回多个套接字
 def bind_sockets(port, address=None, family=socket.AF_UNSPEC,
                  backlog=_DEFAULT_BACKLOG, flags=None, reuse_port=False):
     """Creates listening sockets bound to the given port and address.
@@ -85,6 +86,7 @@ def bind_sockets(port, address=None, family=socket.AF_UNSPEC,
     Returns a list of socket objects (multiple sockets are returned if
     the given address maps to multiple IP addresses, which is most common
     for mixed IPv4 and IPv6 use).
+    返回套接字对象的列表（如果给定地址映射到多个IP地址，则返回多个套接字，这对于IPv4和IPv6混合使用最为常见）
 
     Address may be either an IP address or hostname.  If it's a hostname,
     the server will listen on all IP addresses associated with the
@@ -92,6 +94,10 @@ def bind_sockets(port, address=None, family=socket.AF_UNSPEC,
     available interfaces.  Family may be set to either `socket.AF_INET`
     or `socket.AF_INET6` to restrict to IPv4 or IPv6 addresses, otherwise
     both will be used if available.
+    地址可以是IP地址或主机名。
+    如果是主机名，则服务器将侦听与该名称关联的所有IP地址。
+    地址可以是空字符串，也可以是 None 以侦听所有可用接口。
+    可以将Family设置为`socket.AF_INET`或`socket.AF_INET6`以限制为IPv4或IPv6地址，否则将同时使用这两个地址（如果可用）。
 
     The ``backlog`` argument has the same meaning as for
     `socket.listen() <socket.socket.listen>`.
@@ -114,6 +120,7 @@ def bind_sockets(port, address=None, family=socket.AF_UNSPEC,
         # operations on AF_INET6 sockets to fail, but does not
         # automatically exclude those results from getaddrinfo
         # results.
+        # Python可以使用--disable-ipv6进行编译，这会导致对AF_INET6套接字的操作失败，但不会自动从getaddrinfo结果中排除这些结果。
         # http://bugs.python.org/issue16208
         family = socket.AF_INET
     if flags is None:
@@ -138,7 +145,7 @@ def bind_sockets(port, address=None, family=socket.AF_UNSPEC,
                 continue
             raise
         set_close_exec(sock.fileno())
-        if os.name != 'nt':
+        if os.name != 'nt':  # 不是win
             try:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             except socket.error as e:
@@ -209,17 +216,22 @@ if hasattr(socket, 'AF_UNIX'):
         return sock
 
 
+# 为监听socket绑定回调方法
 def add_accept_handler(sock, callback):
     """Adds an `.IOLoop` event handler to accept new connections on ``sock``.
+    添加一个.IOLoop事件处理程序以在sock上接受新连接。
 
     When a connection is accepted, ``callback(connection, address)`` will
     be run (``connection`` is a socket object, and ``address`` is the
     address of the other end of the connection).  Note that this signature
     is different from the ``callback(fd, events)`` signature used for
     `.IOLoop` handlers.
+    接受连接后，将运行“ callback（connection，address）”（“ connection”是套接字对象，而“ address”是连接另一端的地址）。
+    请注意，此签名与用于.IOLoop处理程序的``回调（fd，events）''签名不同。
 
     A callable is returned which, when called, will remove the `.IOLoop`
     event handler and stop processing further incoming connections.
+    返回一个callable，当被调用时，它将删除.IOLoop事件处理程序并停止处理进一步的传入连接。
 
     .. versionchanged:: 5.0
        The ``io_loop`` argument (deprecated since version 4.1) has been removed.
@@ -260,7 +272,7 @@ def add_accept_handler(sock, callback):
                     continue
                 raise
             set_close_exec(connection.fileno())
-            callback(connection, address)
+            callback(connection, address)  # 调用accept后的处理方法
 
     def remove_handler():
         io_loop.remove_handler(sock)

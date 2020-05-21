@@ -135,7 +135,7 @@ class _Connector(object):
             # This is a late arrival; just drop it.
             stream.close()
         else:
-            self.streams.discard(stream)  # 移除当流
+            self.streams.discard(stream)  # 移除当前流
             self.future.set_result((af, addr, stream))  # 设置返回值，即当前成功连接的stream
             self.close_streams()  # 移除剩下的所有流
 
